@@ -359,7 +359,7 @@ function ServiceExperience({ onBack }: { onBack: () => void }) {
             onClick={onBack}
             type="button"
           >
-            랜딩으로 돌아가기
+            랜딩페이지 보러가기
           </button>
         </header>
 
@@ -418,8 +418,8 @@ function ServiceExperience({ onBack }: { onBack: () => void }) {
             <p className="mt-5 max-w-2xl text-lg leading-8 text-[#6F6762]">
               하단 탭, 홈 추천 카드, 카카오 로그인 영역, 지도 WebView,
               BottomSheet, 지역 미션과 스탬프 흐름을 웹에서 바로 확인할 수
-              있습니다. 카카오맵 심사자는 랜딩 설명을 읽은 뒤 이 화면에서 실제
-              서비스 구조를 확인할 수 있습니다.
+              있습니다. 카카오맵 심사자는 첫 화면에서 실제 서비스 구조를 먼저
+              확인한 뒤, 필요할 때 랜딩페이지에서 활용 목적을 검토할 수 있습니다.
             </p>
             <div className="mt-8 grid gap-3 sm:grid-cols-2">
               <button
@@ -681,7 +681,7 @@ function ServiceMyScreen() {
 }
 
 function App() {
-  const [view, setView] = useState<'landing' | 'service'>('landing')
+  const [view, setView] = useState<'landing' | 'service'>('service')
 
   if (view === 'service') {
     return (
