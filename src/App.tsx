@@ -235,10 +235,10 @@ function App() {
 
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-[#eef5f0]">
-      <div ref={mapRef} className="h-full w-full" />
+      <div ref={mapRef} className="relative z-0 h-full w-full" />
 
       {status === 'ready' ? (
-        <section className="absolute left-3 right-3 top-3 max-h-[52dvh] overflow-hidden rounded-lg bg-white shadow-lg">
+        <section className="absolute left-3 right-3 top-3 z-[10000] max-h-[52dvh] overflow-hidden rounded-lg bg-white shadow-lg">
           <form className="flex gap-2 p-3" onSubmit={searchPlaces}>
             <input
               aria-label="장소 검색어"
@@ -288,7 +288,7 @@ function App() {
       ) : null}
 
       {selectedPlace ? (
-        <section className="absolute bottom-3 left-3 right-3 rounded-lg bg-white p-4 shadow-lg">
+        <section className="absolute bottom-3 left-3 right-3 z-[10000] rounded-lg bg-white p-4 shadow-lg">
           <p className="truncate text-base font-black text-[#3A3A3A]">
             {selectedPlace.place_name}
           </p>
@@ -306,7 +306,7 @@ function App() {
       ) : null}
 
       {status !== 'ready' ? (
-        <div className="absolute inset-0 grid place-items-center bg-[#eef5f0] px-6 text-center">
+        <div className="absolute inset-0 z-[10001] grid place-items-center bg-[#eef5f0] px-6 text-center">
           <p className="rounded-lg bg-white/95 px-4 py-3 text-sm font-bold text-[#3A3A3A] shadow">
             {status === 'missing'
               ? 'Kakao Maps JavaScript Key 설정이 필요합니다.'
