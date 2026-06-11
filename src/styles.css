@@ -22,8 +22,21 @@ body,
   width: 100%;
   height: 100%;
   overflow: hidden;
+  /* Prevent system zoom behavior */
+  -webkit-text-size-adjust: 100%;
 }
 
 html {
   scroll-behavior: smooth;
 }
+
+/* Force input font size to 16px to prevent iOS auto-zoom on focus */
+input,
+textarea,
+select {
+  font-size: 16px !important;
+}
+
+/* Optional: visually keep the text looking a bit smaller if desired, 
+   but the browser must 'see' 16px to not zoom. 
+   Currently we will just keep it at 16px for safety. */
