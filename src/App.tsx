@@ -121,10 +121,12 @@ function toPayload(place: KakaoPlace): SelectedPlacePayload {
   };
 }
 
-function postSelectedPlace(place: KakaoPlace) {
+function postSelectedPlace(place: KakaoPlace, folderId: string | null) {
   window.ReactNativeWebView?.postMessage(
     JSON.stringify({
-      payload: toPayload(place),
+      place_id: null,
+      folder_id: folderId,
+      place: toPayload(place),
       type: "KAKAO_PLACE_SELECTED",
     }),
   );
@@ -145,6 +147,15 @@ function App() {
   const [searchMessage, setSearchMessage] = useState("장소를 검색해 주세요.");
   const [isSearching, setIsSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(true);
+  const [folderId, setFolderId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const fId = params.get("folder_id");
+    if (fId) {
+      setFolderId(fId);
+    }
+  }, []);
 
   useEffect(() => {
     if (!mapRef.current || !KAKAO_MAP_JS_KEY) {
@@ -346,7 +357,7 @@ function App() {
           </p>
           <button
             className="mt-4 h-12 w-full rounded-md bg-[#F08057] text-base font-bold text-white shadow-sm active:bg-[#D96D46]"
-            onClick={() => postSelectedPlace(selectedPlace)}
+            onClick={() => selectedPlace && postSelectedPlace(selectedPlace, folderId)}
             type="button"
           >
             이 장소 저장하기
