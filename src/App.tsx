@@ -313,7 +313,7 @@ function App() {
       ) : null}
 
       {selectedPlace && !showSearch ? (
-        <section className="absolute bottom-3 left-3 right-3 z-[10000] rounded-lg bg-white p-4 shadow-lg">
+        <section className="absolute top-3 left-3 right-3 z-[10000] rounded-lg bg-white p-4 shadow-lg">
           <div className="mb-4 flex items-center justify-between">
             <button
               onClick={() => setShowSearch(true)}
