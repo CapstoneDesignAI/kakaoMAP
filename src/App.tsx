@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 type Feature = {
   title: string
@@ -20,6 +20,54 @@ type Scenario = {
   title: string
   description: string
 }
+
+type KakaoLatLng = object
+type KakaoLatLngBounds = {
+  extend: (position: KakaoLatLng) => void
+}
+type KakaoMap = {
+  setBounds: (bounds: KakaoLatLngBounds) => void
+}
+type KakaoMarker = object
+type KakaoMaps = {
+  load: (callback: () => void) => void
+  LatLng: new (lat: number, lng: number) => KakaoLatLng
+  LatLngBounds: new () => KakaoLatLngBounds
+  Map: new (
+    container: HTMLElement,
+    options: { center: KakaoLatLng; level: number },
+  ) => KakaoMap
+  Marker: new (options: {
+    map: KakaoMap
+    position: KakaoLatLng
+    title: string
+  }) => KakaoMarker
+  InfoWindow: new (options: { content: string }) => {
+    open: (map: KakaoMap, marker: KakaoMarker) => void
+  }
+  Polyline: new (options: {
+    map: KakaoMap
+    path: KakaoLatLng[]
+    strokeColor: string
+    strokeOpacity: number
+    strokeStyle: string
+    strokeWeight: number
+  }) => object
+}
+
+declare global {
+  interface Window {
+    kakao?: {
+      maps: KakaoMaps
+    }
+  }
+}
+
+const KAKAO_MAP_JS_KEY = import.meta.env.VITE_KAKAO_MAP_JS_KEY as
+  | string
+  | undefined
+
+let kakaoMapSdkPromise: Promise<KakaoMaps> | null = null
 
 const reviewSummary: ReviewPoint[] = [
   {
@@ -164,6 +212,63 @@ const kakaoMapScenarios: Scenario[] = [
       '사용자는 추천된 여행지 주변의 관광지, 카페, 음식점 등의 위치를 지도에서 확인할 수 있으며, 이를 통해 해당 지역 내 체류시간과 소비를 자연스럽게 확대할 수 있습니다.',
   },
 ]
+
+const mapPlaces = [
+  {
+    category: '추천 여행지',
+    lat: 36.9847,
+    lng: 128.3655,
+    name: '단양 구경시장',
+  },
+  {
+    category: '추천 여행지',
+    lat: 36.9961,
+    lng: 128.3427,
+    name: '도담삼봉',
+  },
+  {
+    category: '지역 미션',
+    lat: 36.9839,
+    lng: 128.365,
+    name: '로컬 시장 간식 미션',
+  },
+]
+
+function loadKakaoMapSdk() {
+  if (!KAKAO_MAP_JS_KEY) {
+    return Promise.reject(new Error('missing-kakao-map-key'))
+  }
+
+  if (window.kakao?.maps) {
+    return new Promise<KakaoMaps>((resolve) => {
+      window.kakao?.maps.load(() => resolve(window.kakao!.maps))
+    })
+  }
+
+  if (kakaoMapSdkPromise) {
+    return kakaoMapSdkPromise
+  }
+
+  kakaoMapSdkPromise = new Promise<KakaoMaps>((resolve, reject) => {
+    const script = document.createElement('script')
+    script.async = true
+    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(
+      KAKAO_MAP_JS_KEY,
+    )}&autoload=false&libraries=services`
+    script.onload = () => {
+      if (!window.kakao?.maps) {
+        reject(new Error('kakao-map-sdk-not-ready'))
+        return
+      }
+
+      window.kakao.maps.load(() => resolve(window.kakao!.maps))
+    }
+    script.onerror = () => reject(new Error('kakao-map-sdk-load-failed'))
+    document.head.appendChild(script)
+  })
+
+  return kakaoMapSdkPromise
+}
 
 function SectionLabel({ children }: { children: string }) {
   return (
@@ -550,23 +655,102 @@ function ServiceRecommendCard() {
   )
 }
 
+function KakaoMapPanel() {
+  const mapRef = useRef<HTMLDivElement | null>(null)
+  const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'missing' | 'error'>(
+    KAKAO_MAP_JS_KEY ? 'idle' : 'missing',
+  )
+
+  useEffect(() => {
+    if (!mapRef.current || !KAKAO_MAP_JS_KEY) {
+      return
+    }
+
+    let cancelled = false
+    setStatus('loading')
+
+    loadKakaoMapSdk()
+      .then((maps) => {
+        if (cancelled || !mapRef.current) {
+          return
+        }
+
+        mapRef.current.innerHTML = ''
+        const center = new maps.LatLng(36.9905, 128.356)
+        const map = new maps.Map(mapRef.current, {
+          center,
+          level: 6,
+        })
+        const bounds = new maps.LatLngBounds()
+        const path: KakaoLatLng[] = []
+
+        mapPlaces.forEach((place) => {
+          const position = new maps.LatLng(place.lat, place.lng)
+          path.push(position)
+          bounds.extend(position)
+
+          const marker = new maps.Marker({
+            map,
+            position,
+            title: place.name,
+          })
+          const infoWindow = new maps.InfoWindow({
+            content: `<div style="padding:8px 10px;font-size:12px;line-height:1.4"><strong>${place.name}</strong><br/>${place.category}</div>`,
+          })
+          infoWindow.open(map, marker)
+        })
+
+        new maps.Polyline({
+          map,
+          path,
+          strokeColor: '#F08057',
+          strokeOpacity: 0.85,
+          strokeStyle: 'solid',
+          strokeWeight: 4,
+        })
+        map.setBounds(bounds)
+        setStatus('ready')
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setStatus(KAKAO_MAP_JS_KEY ? 'error' : 'missing')
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  return (
+    <div className="absolute inset-0">
+      <div ref={mapRef} className="h-full w-full bg-[#eef5f0]" />
+      {status !== 'ready' ? (
+        <div className="absolute inset-0 grid place-items-center bg-[#eef5f0] px-8 text-center">
+          <div className="rounded-[22px] border border-[#E8DDD5] bg-white/95 p-5 shadow-lg">
+            <p className="text-sm font-black text-[#F08057]">
+              {status === 'missing'
+                ? 'Kakao Maps JavaScript Key 설정 필요'
+                : status === 'loading'
+                  ? '카카오맵을 불러오는 중입니다.'
+                  : '카카오맵을 불러오지 못했습니다.'}
+            </p>
+            <p className="mt-2 text-xs leading-5 text-[#6F6762]">
+              Vercel 환경변수에 VITE_KAKAO_MAP_JS_KEY를 등록하고, 카카오
+              개발자센터 JavaScript SDK 도메인에 배포 도메인을 추가하면 실제 지도가
+              표시됩니다.
+            </p>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function ServiceMapScreen() {
   return (
     <section className="relative min-h-full overflow-hidden bg-[#eef5f0]">
-      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(58,58,58,0.08)_1px,transparent_1px),linear-gradient(rgba(58,58,58,0.08)_1px,transparent_1px)] bg-[length:44px_44px]" />
-      <div className="absolute left-8 top-12 h-28 w-48 rounded-full border-[16px] border-[#A8B89A]/80" />
-      <div className="absolute right-6 top-56 h-32 w-52 rounded-full border-[16px] border-[#F29B7F]/75" />
-      <div className="absolute left-14 top-36 h-3 w-64 rotate-12 rounded-full bg-white/80" />
-      <div className="absolute left-28 top-60 h-3 w-52 -rotate-12 rounded-full bg-white/80" />
-      <div className="absolute left-[44%] top-[32%] grid h-16 w-16 place-items-center rounded-full bg-[#F08057] text-2xl font-black text-white shadow-xl shadow-[#F08057]/30">
-        T
-      </div>
-      <div className="absolute left-[22%] top-[54%] grid h-10 w-10 place-items-center rounded-full bg-[#739E6B] text-sm font-black text-white shadow-lg">
-        M
-      </div>
-      <div className="absolute right-[22%] top-[36%] grid h-10 w-10 place-items-center rounded-full bg-[#7094AD] text-sm font-black text-white shadow-lg">
-        C
-      </div>
+      <KakaoMapPanel />
       <div className="absolute right-5 top-5 rounded-full bg-white px-3 py-2 text-xs font-black text-[#6F6762] shadow">
         Kakao Map WebView
       </div>
