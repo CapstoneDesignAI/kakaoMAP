@@ -151,6 +151,24 @@ function App() {
   const [showSearch, setShowSearch] = useState(true);
   const [folderId, setFolderId] = useState<string | null>(null);
 
+  const handleClearKeyword = () => {
+    setKeyword("");
+    setResults([]);
+    setSearchMessage("장소를 검색해 주세요.");
+    setSelectedPlace(null);
+    markerRef.current?.setMap(null);
+  };
+
+  const handleKeywordChange = (value: string) => {
+    setKeyword(value);
+    if (!value.trim()) {
+      setResults([]);
+      setSearchMessage("장소를 검색해 주세요.");
+      setSelectedPlace(null);
+      markerRef.current?.setMap(null);
+    }
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const fId = params.get("folder_id");
@@ -277,15 +295,38 @@ function App() {
       {status === "ready" && showSearch ? (
         <section className="absolute left-3 right-3 top-3 z-[10000] max-h-[52dvh] overflow-hidden rounded-lg bg-white shadow-lg transition-transform duration-300">
           <form className="flex gap-2 p-3" onSubmit={searchPlaces}>
-            <input
-              aria-label="장소 검색어"
-              className="min-w-0 flex-1 rounded-md border border-[#E8DDD5] px-3 py-3 text-base font-medium text-[#3A3A3A] outline-none focus:border-[#739E6B]"
-              onChange={(event) => setKeyword(event.target.value)}
-              placeholder="장소를 검색하세요"
-              type="search"
-              value={keyword}
-              style={{ fontSize: "16px" }} // Explicitly force 16px to prevent iOS zoom
-            />
+            <div className="relative flex-1">
+              <input
+                aria-label="장소 검색어"
+                className="w-full rounded-md border border-[#E8DDD5] py-3 pl-3 pr-10 text-base font-medium text-[#3A3A3A] outline-none focus:border-[#739E6B]"
+                onChange={(event) => handleKeywordChange(event.target.value)}
+                placeholder="장소를 검색하세요"
+                type="search"
+                value={keyword}
+                style={{ fontSize: "16px" }} // Explicitly force 16px to prevent iOS zoom
+              />
+              {keyword && (
+                <button
+                  type="button"
+                  onClick={handleClearKeyword}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#A59A93] hover:text-[#6F6762]"
+                >
+                  <svg
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              )}
+            </div>
             <button
               className="rounded-md bg-[#739E6B] px-4 text-sm font-bold text-white disabled:bg-[#A59A93]"
               disabled={isSearching}
@@ -295,33 +336,37 @@ function App() {
             </button>
           </form>
 
-          <div className="border-t border-[#E8DDD5]">
-            <p className="px-4 py-2 text-xs font-bold text-[#6F6762]">
-              {searchMessage}
-            </p>
-            <div className="max-h-[34dvh] overflow-y-auto">
-              {results.map((place) => (
-                <button
-                  className={`block w-full border-t border-[#F2E8E1] px-4 py-3 text-left ${
-                    selectedPlace?.id === place.id ? "bg-[#FFF8F3]" : "bg-white"
-                  }`}
-                  key={place.id}
-                  onClick={() => selectPlace(place)}
-                  type="button"
-                >
-                  <span className="block truncate text-sm font-bold text-[#3A3A3A]">
-                    {place.place_name}
-                  </span>
-                  <span className="mt-1 block truncate text-xs text-[#6F6762]">
-                    {place.road_address_name || place.address_name}
-                  </span>
-                  <span className="mt-1 block truncate text-xs font-bold text-[#739E6B]">
-                    {place.category_group_name || place.category_name}
-                  </span>
-                </button>
-              ))}
+          {keyword.trim() && (
+            <div className="border-t border-[#E8DDD5]">
+              <p className="px-4 py-2 text-xs font-bold text-[#6F6762]">
+                {searchMessage}
+              </p>
+              <div className="max-h-[34dvh] overflow-y-auto">
+                {results.map((place) => (
+                  <button
+                    className={`block w-full border-t border-[#F2E8E1] px-4 py-3 text-left ${
+                      selectedPlace?.id === place.id
+                        ? "bg-[#FFF8F3]"
+                        : "bg-white"
+                    }`}
+                    key={place.id}
+                    onClick={() => selectPlace(place)}
+                    type="button"
+                  >
+                    <span className="block truncate text-sm font-bold text-[#3A3A3A]">
+                      {place.place_name}
+                    </span>
+                    <span className="mt-1 block truncate text-xs text-[#6F6762]">
+                      {place.road_address_name || place.address_name}
+                    </span>
+                    <span className="mt-1 block truncate text-xs font-bold text-[#739E6B]">
+                      {place.category_group_name || place.category_name}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </section>
       ) : null}
 
