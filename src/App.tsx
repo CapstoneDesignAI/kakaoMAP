@@ -124,9 +124,11 @@ function toPayload(place: KakaoPlace): SelectedPlacePayload {
 function postSelectedPlace(place: KakaoPlace, folderId: string | null) {
   window.ReactNativeWebView?.postMessage(
     JSON.stringify({
-      place_id: null,
-      folder_id: folderId,
-      place: toPayload(place),
+      payload: {
+        place_id: null,
+        folder_id: folderId,
+        place: toPayload(place),
+      },
       type: "KAKAO_PLACE_SELECTED",
     }),
   );
