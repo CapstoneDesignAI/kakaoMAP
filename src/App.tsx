@@ -181,13 +181,15 @@ function parseTripickMapMessage(data: unknown): TripickMapMessage | null {
   return message.type === "TRIPICK_MAP_DATA" ? (message as TripickMapMessage) : null;
 }
 
-function hasCoordinates(place: MapPlacePayload) {
-  return (
-    typeof place.latitude === "number" &&
-    Number.isFinite(place.latitude) &&
-    typeof place.longitude === "number" &&
-    Number.isFinite(place.longitude)
-  );
+function getCoordinates(place: MapPlacePayload) {
+  const latitude = Number(place.latitude);
+  const longitude = Number(place.longitude);
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  return { latitude, longitude };
 }
 
 function getMarkerTitle(place: MapPlacePayload, index: number) {
@@ -325,13 +327,15 @@ function App() {
     const maps = mapsApiRef.current;
     const map = mapInstanceRef.current;
 
-    if (!maps || !map || !hasCoordinates(place)) {
+    const coordinates = getCoordinates(place);
+
+    if (!maps || !map || !coordinates) {
       return null;
     }
 
     const marker = new maps.Marker({
       map,
-      position: new maps.LatLng(place.latitude!, place.longitude!),
+      position: new maps.LatLng(coordinates.latitude, coordinates.longitude),
       title: getMarkerTitle(place, index),
     });
     const infoWindow = new maps.InfoWindow({
@@ -358,16 +362,23 @@ function App() {
     pendingMapDataRef.current = payload;
     clearMapOverlays();
 
-    const bookmarks = (payload?.bookmarks ?? []).filter(hasCoordinates);
-    const routePlaces = (payload?.route?.places ?? []).filter(hasCoordinates);
+    const bookmarks = (payload?.bookmarks ?? []).filter((place) =>
+      Boolean(getCoordinates(place)),
+    );
+    const routePlaces = (payload?.route?.places ?? []).filter((place) =>
+      Boolean(getCoordinates(place)),
+    );
 
     bookmarks.forEach((place, index) => {
       addMarker({ ...place, type: "bookmark" }, index);
     });
 
-    const routePath = routePlaces.map(
-      (place) => new maps.LatLng(place.latitude!, place.longitude!),
-    );
+    const routePath = routePlaces
+      .map((place) => getCoordinates(place))
+      .filter((coordinates): coordinates is NonNullable<typeof coordinates> =>
+        Boolean(coordinates),
+      )
+      .map((coordinates) => new maps.LatLng(coordinates.latitude, coordinates.longitude));
     routePlaces.forEach((place, index) => {
       addMarker({ ...place, order: place.order ?? index + 1, type: "route" }, index);
     });
@@ -384,8 +395,9 @@ function App() {
     }
 
     const firstRoutePlace = routePlaces[0] ?? bookmarks[0];
-    if (firstRoutePlace) {
-      map.setCenter(new maps.LatLng(firstRoutePlace.latitude!, firstRoutePlace.longitude!));
+    const firstCoordinates = firstRoutePlace ? getCoordinates(firstRoutePlace) : null;
+    if (firstCoordinates) {
+      map.setCenter(new maps.LatLng(firstCoordinates.latitude, firstCoordinates.longitude));
       map.setLevel(routePlaces.length ? 6 : 5);
     }
   };
