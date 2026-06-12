@@ -10,6 +10,9 @@ type KakaoMap = {
 type KakaoMarker = {
   setMap: (map: KakaoMap | null) => void;
 };
+type KakaoPolyline = {
+  setMap: (map: KakaoMap | null) => void;
+};
 type KakaoPlace = {
   address_name: string;
   category_group_name: string;
@@ -37,6 +40,14 @@ type KakaoMaps = {
   InfoWindow: new (options: { content: string }) => {
     open: (map: KakaoMap, marker: KakaoMarker) => void;
   };
+  Polyline: new (options: {
+    map: KakaoMap;
+    path: KakaoLatLng[];
+    strokeColor: string;
+    strokeOpacity: number;
+    strokeStyle: string;
+    strokeWeight: number;
+  }) => KakaoPolyline;
   services: {
     Places: new () => {
       keywordSearch: (
@@ -55,6 +66,31 @@ type SelectedPlacePayload = {
   latitude: number;
   longitude: number;
   name: string;
+};
+
+type MapPlacePayload = {
+  address?: string | null;
+  category?: string | null;
+  id?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  name: string;
+  order?: number | null;
+  place_id?: string | null;
+  type?: "bookmark" | "route";
+};
+
+type TripickMapDataPayload = {
+  bookmarks?: MapPlacePayload[];
+  route?: {
+    places: MapPlacePayload[];
+    title?: string | null;
+  } | null;
+};
+
+type TripickMapMessage = {
+  payload?: TripickMapDataPayload;
+  type: "TRIPICK_MAP_DATA";
 };
 
 declare global {
@@ -134,12 +170,39 @@ function postSelectedPlace(place: KakaoPlace, folderId: string | null) {
   );
 }
 
+function parseTripickMapMessage(data: unknown): TripickMapMessage | null {
+  const parsedData = typeof data === "string" ? JSON.parse(data) : data;
+
+  if (!parsedData || typeof parsedData !== "object") {
+    return null;
+  }
+
+  const message = parsedData as Partial<TripickMapMessage>;
+  return message.type === "TRIPICK_MAP_DATA" ? (message as TripickMapMessage) : null;
+}
+
+function hasCoordinates(place: MapPlacePayload) {
+  return (
+    typeof place.latitude === "number" &&
+    Number.isFinite(place.latitude) &&
+    typeof place.longitude === "number" &&
+    Number.isFinite(place.longitude)
+  );
+}
+
+function getMarkerTitle(place: MapPlacePayload, index: number) {
+  return place.order ? `${place.order}. ${place.name}` : `${index + 1}. ${place.name}`;
+}
+
 function App() {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<KakaoMap | null>(null);
   const mapsApiRef = useRef<KakaoMaps | null>(null);
   const markerRef = useRef<KakaoMarker | null>(null);
+  const overlayMarkersRef = useRef<KakaoMarker[]>([]);
+  const routePolylineRef = useRef<KakaoPolyline | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const pendingMapDataRef = useRef<TripickMapDataPayload | undefined>(undefined);
   const [status, setStatus] = useState<
     "idle" | "loading" | "ready" | "missing" | "error"
   >(KAKAO_MAP_JS_KEY ? "idle" : "missing");
@@ -209,6 +272,9 @@ function App() {
         resizeObserverRef.current.observe(mapRef.current);
 
         setStatus("ready");
+        if (pendingMapDataRef.current) {
+          window.requestAnimationFrame(() => renderMapData(pendingMapDataRef.current));
+        }
       })
       .catch(() => {
         if (!cancelled) {
@@ -247,6 +313,103 @@ function App() {
       setShowSearch(false);
     }
   };
+
+  const clearMapOverlays = () => {
+    overlayMarkersRef.current.forEach((marker) => marker.setMap(null));
+    overlayMarkersRef.current = [];
+    routePolylineRef.current?.setMap(null);
+    routePolylineRef.current = null;
+  };
+
+  const addMarker = (place: MapPlacePayload, index: number) => {
+    const maps = mapsApiRef.current;
+    const map = mapInstanceRef.current;
+
+    if (!maps || !map || !hasCoordinates(place)) {
+      return null;
+    }
+
+    const marker = new maps.Marker({
+      map,
+      position: new maps.LatLng(place.latitude!, place.longitude!),
+      title: getMarkerTitle(place, index),
+    });
+    const infoWindow = new maps.InfoWindow({
+      content: `<div style="padding:8px 10px;font-size:12px;line-height:1.4;white-space:nowrap"><strong>${getMarkerTitle(
+        place,
+        index,
+      )}</strong><br/>${place.category ?? "장소"}</div>`,
+    });
+    infoWindow.open(map, marker);
+    overlayMarkersRef.current.push(marker);
+
+    return marker;
+  };
+
+  const renderMapData = (payload?: TripickMapDataPayload) => {
+    const maps = mapsApiRef.current;
+    const map = mapInstanceRef.current;
+
+    if (!maps || !map) {
+      pendingMapDataRef.current = payload;
+      return;
+    }
+
+    pendingMapDataRef.current = payload;
+    clearMapOverlays();
+
+    const bookmarks = (payload?.bookmarks ?? []).filter(hasCoordinates);
+    const routePlaces = (payload?.route?.places ?? []).filter(hasCoordinates);
+
+    bookmarks.forEach((place, index) => {
+      addMarker({ ...place, type: "bookmark" }, index);
+    });
+
+    const routePath = routePlaces.map(
+      (place) => new maps.LatLng(place.latitude!, place.longitude!),
+    );
+    routePlaces.forEach((place, index) => {
+      addMarker({ ...place, order: place.order ?? index + 1, type: "route" }, index);
+    });
+
+    if (routePath.length >= 2) {
+      routePolylineRef.current = new maps.Polyline({
+        map,
+        path: routePath,
+        strokeColor: "#F08057",
+        strokeOpacity: 0.9,
+        strokeStyle: "solid",
+        strokeWeight: 5,
+      });
+    }
+
+    const firstRoutePlace = routePlaces[0] ?? bookmarks[0];
+    if (firstRoutePlace) {
+      map.setCenter(new maps.LatLng(firstRoutePlace.latitude!, firstRoutePlace.longitude!));
+      map.setLevel(routePlaces.length ? 6 : 5);
+    }
+  };
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const message = parseTripickMapMessage(event.data);
+        if (message) {
+          renderMapData(message.payload);
+        }
+      } catch {
+        return;
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    document.addEventListener("message", handleMessage as EventListener);
+
+    return () => {
+      window.removeEventListener("message", handleMessage);
+      document.removeEventListener("message", handleMessage as EventListener);
+    };
+  });
 
   const searchPlaces = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
