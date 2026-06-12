@@ -201,6 +201,7 @@ function App() {
   const mapInstanceRef = useRef<KakaoMap | null>(null);
   const mapsApiRef = useRef<KakaoMaps | null>(null);
   const markerRef = useRef<KakaoMarker | null>(null);
+  const currentLocationMarkerRef = useRef<KakaoMarker | null>(null);
   const overlayMarkersRef = useRef<KakaoMarker[]>([]);
   const routePolylineRef = useRef<KakaoPolyline | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -215,6 +216,8 @@ function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(true);
   const [folderId, setFolderId] = useState<string | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationMessage, setLocationMessage] = useState<string | null>(null);
 
   const handleClearKeyword = () => {
     setKeyword("");
@@ -241,6 +244,58 @@ function App() {
       setFolderId(fId);
     }
   }, []);
+
+  const moveToCurrentLocation = (shouldShowMessage = true) => {
+    const maps = mapsApiRef.current;
+    const map = mapInstanceRef.current;
+
+    if (!maps || !map) {
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      if (shouldShowMessage) {
+        setLocationMessage("현재 위치를 사용할 수 없습니다.");
+      }
+      return;
+    }
+
+    setIsLocating(true);
+    if (shouldShowMessage) {
+      setLocationMessage(null);
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const currentPosition = new maps.LatLng(
+          position.coords.latitude,
+          position.coords.longitude,
+        );
+
+        currentLocationMarkerRef.current?.setMap(null);
+        currentLocationMarkerRef.current = new maps.Marker({
+          map,
+          position: currentPosition,
+          title: "내 위치",
+        });
+        map.setCenter(currentPosition);
+        map.setLevel(4);
+        setIsLocating(false);
+        setLocationMessage(null);
+      },
+      () => {
+        setIsLocating(false);
+        if (shouldShowMessage) {
+          setLocationMessage("위치 권한을 허용해 주세요.");
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 30000,
+        timeout: 8000,
+      },
+    );
+  };
 
   useEffect(() => {
     if (!mapRef.current || !KAKAO_MAP_JS_KEY) {
@@ -274,6 +329,7 @@ function App() {
         resizeObserverRef.current.observe(mapRef.current);
 
         setStatus("ready");
+        window.requestAnimationFrame(() => moveToCurrentLocation(false));
         if (pendingMapDataRef.current) {
           window.requestAnimationFrame(() => renderMapData(pendingMapDataRef.current));
         }
@@ -466,6 +522,42 @@ function App() {
         ref={mapRef}
         className="relative z-0 h-full w-full touch-pan-x touch-pan-y"
       />
+
+      {status === "ready" ? (
+        <button
+          aria-label="내 위치로 이동"
+          className="absolute bottom-[118px] right-3 z-[10000] flex h-12 w-12 items-center justify-center rounded-full bg-white text-[#3A3A3A] shadow-lg active:bg-[#F6E6DC] disabled:text-[#A59A93]"
+          disabled={isLocating}
+          onClick={() => moveToCurrentLocation(true)}
+          type="button"
+        >
+          {isLocating ? (
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-[#739E6B] border-t-transparent" />
+          ) : (
+            <svg
+              aria-hidden="true"
+              className="h-6 w-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M12 3v3m0 12v3m9-9h-3M6 12H3m15.36-6.36-2.12 2.12M7.76 16.24l-2.12 2.12m12.72 0-2.12-2.12M7.76 7.76 5.64 5.64"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+              />
+              <circle cx="12" cy="12" r="3" strokeWidth="2" />
+            </svg>
+          )}
+        </button>
+      ) : null}
+
+      {locationMessage ? (
+        <p className="absolute bottom-[176px] left-3 right-3 z-[10000] rounded-lg bg-white/95 px-4 py-3 text-center text-sm font-bold text-[#3A3A3A] shadow-lg">
+          {locationMessage}
+        </p>
+      ) : null}
 
       {status === "ready" && showSearch ? (
         <section className="absolute left-3 right-3 top-3 z-[10000] max-h-[52dvh] overflow-hidden rounded-lg bg-white shadow-lg transition-transform duration-300">
